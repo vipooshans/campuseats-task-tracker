@@ -52,7 +52,7 @@ GROUP BY u.email, r.name
 ORDER BY u.email;
 
 -- Ask the class: to give every Staff member a new capability, how many rows
--- change?  ONE, in role_permissions. Not one per employee.
+-- change?  ONE, in role_permissions. Not one per employee. 
 
 
 -- ---------------------------------------------------------------------------

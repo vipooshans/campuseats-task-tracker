@@ -37,7 +37,7 @@ CREATE UNIQUE INDEX ux_users_email ON users (email);
 
 CREATE TABLE roles (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    name        TEXT NOT NULL,                   -- Admin / Staff / Customer
+    name        TEXT NOT NULL,                   -- Admin / Staff / Customer 
     description TEXT
 );
 CREATE UNIQUE INDEX ux_roles_name ON roles (name);
@@ -45,7 +45,7 @@ CREATE UNIQUE INDEX ux_roles_name ON roles (name);
 
 CREATE TABLE permissions (
     id          BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-    code        TEXT NOT NULL,                   -- e.g. 'orders.refund'
+    code        TEXT NOT NULL,                   -- e.g. 'orders.refund '
     description TEXT
 );
 CREATE UNIQUE INDEX ux_permissions_code ON permissions (code);
