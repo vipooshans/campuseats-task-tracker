@@ -13,7 +13,7 @@
 #
 #  These credentials are development-only and this file is committed, which is
 #  exactly the distinction from slide 23: a throwaway local password in a
-#  compose file is fine, the production one is not. Never reuse this password
+#  compose file is fine, the production one is not. Never reuse this password 
 #  anywhere that matters.
 # ============================================================================
 
