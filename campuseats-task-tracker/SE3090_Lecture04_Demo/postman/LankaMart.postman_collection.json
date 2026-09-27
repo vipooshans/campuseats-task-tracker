@@ -1,0 +1,1994 @@
+{
+  "info": {
+    "name": "SE3090 Lecture 04 - LankaMart (PostgreSQL, JWT, RBAC)",
+    "description": "Teaching collection for SE3090 Lecture 04: Database Design, Authentication, Authorization and Integration.\n\nHOW TO USE\n1. Start the API:  dotnet run --project src/LankaMart.Api\n2. Run '2.1 Login as Amal (Customer)' - the test script stores the token in a collection variable, so every later request is already authenticated.\n3. Work down the folders in order. Folder 3 is the heart of the lecture: same endpoint, different caller, different answer.\n\nOr use the Collection Runner: it will run every request and report pass/fail on each assertion.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5090"
+    },
+    {
+      "key": "password",
+      "value": "Password123!"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "staffToken",
+      "value": ""
+    },
+    {
+      "key": "adminToken",
+      "value": ""
+    },
+    {
+      "key": "nadiaToken",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Public endpoints (no token)",
+      "description": "Everything here works with no Authorization header at all. Browsing a catalogue should not require an account.",
+      "item": [
+        {
+          "name": "1.1 Products (paged)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products?page=1&pageSize=5",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products"
+              ]
+            },
+            "description": "Watch the terminal: EF Core prints the SELECT, the COUNT and the LIMIT/OFFSET it sent to PostgreSQL."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"paging metadata is present\", function () {",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b).to.have.property(\"totalItems\");",
+                  "    pm.expect(b.items).to.be.an(\"array\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.2 Search products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products?search=mouse",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products"
+              ]
+            },
+            "description": "The search becomes an ILIKE in SQL - the value is parameterized, never concatenated (slide 40)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.3 Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/categories",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "categories"
+              ]
+            },
+            "description": "Slide 18: categories are a table now, so products reference them by id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "1.4 Database info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/db-info",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "db-info"
+              ]
+            },
+            "description": "Slide 23: check current_user. If it says 'postgres', the API is connected as the superuser and one injection flaw becomes catastrophic."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Authentication (slides 30-33)",
+      "description": "Obtaining, reading, rotating and revoking tokens.",
+      "item": [
+        {
+          "name": "2.1 Login as Amal (Customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Run this FIRST. The test script stores accessToken and refreshToken as collection variables for every request below.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"amal@mail.lk\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var body = pm.response.json();",
+                  "pm.collectionVariables.set(\"accessToken\", body.accessToken);",
+                  "pm.test(\"a token was returned\", function () {",
+                  "    pm.expect(body.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "});",
+                  "pm.collectionVariables.set(\"refreshToken\", pm.response.json().refreshToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.2 Login as Staff",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Stores staffToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"staff@lankamart.lk\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set(\"staffToken\", pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.3 Login as Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Stores adminToken.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@lankamart.lk\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set(\"adminToken\", pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.4 Login as Nadia (second Customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Needed for the 403 demo in folder 3 - two customers with identical roles and different data.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nadia@mail.lk\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.collectionVariables.set(\"nadiaToken\", pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.5 Wrong password -> 401",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Note the message, then compare with 2.6. They are identical on purpose: different messages let an attacker enumerate registered emails.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"amal@mail.lk\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.collectionVariables.set(\"msgWrongPassword\", pm.response.json().detail);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.6 Unknown email -> 401 (same message)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "The assertion below is the lesson: the two failure messages must match.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ghost@mail.lk\",\n  \"password\": \"wrong-password\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});",
+                  "pm.test(\"message matches the wrong-password message\", function () {",
+                  "    pm.expect(pm.response.json().detail).to.eql(",
+                  "        pm.collectionVariables.get(\"msgWrongPassword\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.7 Who am I?",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Slide 31 step 6. Nothing here reads the database - this identity came entirely from the signed token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"the token carried a role\", function () {",
+                  "    pm.expect(pm.response.json().roles).to.include(\"Customer\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.8 No token -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "401 means UNAUTHENTICATED: we do not know who you are (slide 28)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.9 Tampered token -> 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "The payload claims Admin, but the signature does not match. This is what the signing key protects (slide 30)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.10 Decode a token with no key",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/token-inspect?token={{accessToken}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "token-inspect"
+              ]
+            },
+            "description": "Signed, not encrypted. Anyone can read a JWT; only the key holder can forge one. Therefore no secrets in the payload (slide 30)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.11 Refresh (rotation)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Issues a new pair and REVOKES the presented token. Single use, always.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"a different refresh token came back\", function () {",
+                  "    pm.expect(pm.response.json().refreshToken).to.not.eql(",
+                  "        pm.collectionVariables.get(\"refreshToken\"));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.12 Replay the OLD refresh token -> 401 + family revoked",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Run 2.11 first, then this. It presents the SAME token again - exactly what a thief would do. The API cannot tell theft from replay, so it revokes the entire family and forces a fresh login. Check the terminal for 'Refresh token REUSE detected' (slide 32).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 401\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2.13 Register (over-posting is ignored)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "This body asks for the Admin role. RegisterRequest has no such field, so there is nowhere for it to bind and it is silently ignored (slide 40).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Student\",\n  \"email\": \"student.test@mail.lk\",\n  \"password\": \"StudentPass123!\",\n  \"role\": \"Admin\",\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"only the Customer role was granted\", function () {",
+                  "    pm.expect(pm.response.json().user.roles).to.eql([\"Customer\"]);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Authorization - the heart of the lecture (slides 36-38)",
+      "description": "Same endpoint, same valid token, different caller, different answer. Run 2.1 to 2.4 first so all four tokens exist.",
+      "item": [
+        {
+          "name": "3.1 Place an order (Amal)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "No customerId in the body. It comes from the 'sub' claim of the token, server-side (slide 33, last row).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"card\",\n  \"items\": [\n    {\n      \"productId\": 1,\n      \"quantity\": 2\n    },\n    {\n      \"productId\": 4,\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set(\"myOrderId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Over-posting proof (Nadia)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{nadiaToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "The same request, now claiming customerId 1 and DELIVERED status. Check the response: the order belongs to the TOKEN, not to the body.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customerId\": 1,\n  \"status\": \"DELIVERED\",\n  \"deliveryFee\": 0,\n  \"paymentMethod\": \"cash\",\n  \"items\": [\n    {\n      \"productId\": 2,\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"customerId came from the token, not the body\", function () {",
+                  "    pm.expect(pm.response.json().customerId).to.not.eql(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 My orders (Amal)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/my",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "my"
+              ]
+            },
+            "description": "No id in the route, so there is nothing to tamper with. The safest possible design for a per-user resource."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 *** Another customer's order -> 403 ***",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{nadiaToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "1"
+              ]
+            },
+            "description": "THE demo. Order 1 belongs to Amal. Ask for it as Nadia: valid token, identical Customer role, same endpoint - and 403. Broken object-level authorization is number one in the OWASP API Security Top 10 (slide 36). See OrderService.EnsureCanAccess."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.5 The same order, as its owner -> 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "1"
+              ]
+            },
+            "description": "Ownership, not role, is what changed."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.6 The same order, as Staff -> 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "1"
+              ]
+            },
+            "description": "Staff handle every order. Role beats ownership here, by design."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.7 All orders as Customer -> 403",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders?page=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "Authenticated and refused: 403, not 401 (slide 28)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.8 All orders as Staff -> 200",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders?page=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "[Authorize(Roles = \"Staff,Admin\")] on the action (slide 38)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.9 Add a product as Customer -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products"
+              ]
+            },
+            "description": "Slide 38, line by line. The request never reaches the action body.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Contraband Widget\",\n  \"categoryId\": 1,\n  \"price\": 999,\n  \"stockQty\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.10 The identical request as Staff -> 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products"
+              ]
+            },
+            "description": "Same URL, same body, different token.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Laptop Sleeve 15 inch\",\n  \"categoryId\": 1,\n  \"price\": 3200,\n  \"stockQty\": 20\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.collectionVariables.set(\"newProductId\", pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.11 Delete as Staff -> 403 (Admin only)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/{{newProductId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "{{newProductId}}"
+              ]
+            },
+            "description": "A narrower role list on a more destructive verb."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.12 Delete as Admin -> 204",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/{{newProductId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "{{newProductId}}"
+              ]
+            },
+            "description": "Allowed - as long as the product has never been ordered."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 204\", function () {",
+                  "    pm.response.to.have.status(204);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.13 Delete an ORDERED product -> 409",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products/1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products",
+                "1"
+              ]
+            },
+            "description": "ON DELETE RESTRICT on order_items -> products. PostgreSQL refuses to let the application shred an invoice, and SQLSTATE 23503 becomes a clean 409 (slides 14 and 26)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.14 Refund as Staff -> permission-based",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/1/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "1",
+                "refund"
+              ]
+            },
+            "description": "Guarded by a POLICY requiring the 'orders.refund' permission claim, not by a role list (slide 38, bottom note)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.15 Refund as Customer -> 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders/1/refund",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders",
+                "1",
+                "refund"
+              ]
+            },
+            "description": "No permission claim in this token."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.16 Admin: list users and roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users?page=1&pageSize=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users"
+              ]
+            },
+            "description": "Slide 37 - the junction table, rendered as JSON."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.17 Admin: grant Staff to Amal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/3/roles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "3",
+                "roles"
+              ]
+            },
+            "description": "ONE row inserted into user_roles. Nothing on the users row changes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"Staff\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.18 *** Revocation lag *** re-run 3.9 with the OLD token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products"
+              ]
+            },
+            "description": "Amal is Staff now, but his current access token was signed before the grant and still says Customer - so this is STILL 403. Log in again (2.1) and it works. That is the cost of stateless auth (slide 37).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Second Widget\",\n  \"categoryId\": 1,\n  \"price\": 450,\n  \"stockQty\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.19 Admin: revoke the role again",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/3/roles/Staff",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "3",
+                "roles",
+                "Staff"
+              ]
+            },
+            "description": "This also revokes Amal's refresh tokens, so the removal cannot be outlived by a quiet renewal."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Validation, errors and the deliberately wrong code",
+      "description": "Slides 26, 40 and 41. The demo endpoints return 404 unless the API is in Development with EnableTeachingEndpoints = true.",
+      "item": [
+        {
+          "name": "4.1 Validation failure -> 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{staffToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/products",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "products"
+              ]
+            },
+            "description": "Empty name, negative price. Rejected by [ApiController] before any of our code runs, with a field-by-field list.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"\",\n  \"categoryId\": 1,\n  \"price\": -50,\n  \"stockQty\": -3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Business rule -> 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "orders"
+              ]
+            },
+            "description": "Well-formed request, impossible outcome: more units than we hold. 409, not 400.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"card\",\n  \"items\": [\n    {\n      \"productId\": 5,\n      \"quantity\": 99\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 PostgreSQL 23505 -> 409",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/unique-violation",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "unique-violation"
+              ]
+            },
+            "description": "A real unique-violation from the database, translated into a clean Problem Details document (slide 26)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Unexpected exception -> 500 + traceId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/boom",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "boom"
+              ]
+            },
+            "description": "No stack trace, no table names, no file paths - just a traceId you can find in the log (slide 41)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 500\", function () {",
+                  "    pm.response.to.have.status(500);",
+                  "});",
+                  "pm.test(\"a traceId is returned and nothing else leaks\", function () {",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b.traceId).to.be.a(\"string\");",
+                  "    pm.expect(JSON.stringify(b)).to.not.include(\"at LankaMart\");",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.5 What a careless API leaks (simulation)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/leaky-error",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "leaky-error"
+              ]
+            },
+            "description": "A hard-coded string showing slide 41's left column. Compare with 4.4."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.6 SQL injection - baseline",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/injection?name=Mouse&mode=vulnerable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "injection"
+              ]
+            },
+            "description": "One row, as expected."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.7 SQL injection - the attack",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/injection?name=' OR '1'='1&mode=vulnerable",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "injection"
+              ]
+            },
+            "description": "Count the rows now. The input stopped being data and became SYNTAX. That is the whole of slide 40."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"the injection returned more rows than a real search would\", function () {",
+                  "    pm.expect(pm.response.json().rowsReturned).to.be.above(1);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.8 SQL injection - parameterized",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/injection?name=' OR '1'='1&mode=safe",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "injection"
+              ]
+            },
+            "description": "Identical input, zero rows: it searched for a product literally named \"' OR '1'='1\", which is exactly correct behaviour."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"parameterized query is not fooled\", function () {",
+                  "    pm.expect(pm.response.json().rowsReturned_linq).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.9 N+1 problem",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/n-plus-one",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "n-plus-one"
+              ]
+            },
+            "description": "Count the SELECT statements in the terminal: one, then one per order."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.10 The same data with Include",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/with-include",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "with-include"
+              ]
+            },
+            "description": "One query with a JOIN."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.11 bcrypt: salting and slowness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/demo/hash-password?password=Password123!",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "demo",
+                "hash-password"
+              ]
+            },
+            "description": "Same password, two different hashes, both valid (slide 31)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"the same password produced different hashes\", function () {",
+                  "    pm.expect(pm.response.json().identical).to.be.false;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

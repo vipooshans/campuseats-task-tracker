@@ -1,0 +1,50 @@
+# ============================================================================
+#  Optional: PostgreSQL 16 in a container, for anyone who would rather not
+#  install a database on their laptop. Slide 46's second setup route.
+#
+#      cd db
+#      docker compose up -d          start it
+#      docker compose logs -f        watch it boot
+#      docker compose down           stop it
+#      docker compose down -v        stop it AND delete the data
+#
+#  The matching connection string:
+#      Host=localhost;Port=5432;Database=lankamart;Username=lankamart_app;Password=dev_only_password
+#
+#  These credentials are development-only and this file is committed, which is
+#  exactly the distinction from slide 23: a throwaway local password in a
+#  compose file is fine, the production one is not. Never reuse this password
+#  anywhere that matters.
+# ============================================================================
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: lankamart-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: lankamart
+      POSTGRES_USER: lankamart_app
+      POSTGRES_PASSWORD: dev_only_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - lankamart_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lankamart_app -d lankamart"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # Optional web UI, in case pgAdmin is not installed. http://localhost:8080
+  adminer:
+    image: adminer:4
+    container_name: lankamart-adminer
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      - postgres
+
+volumes:
+  lankamart_data:

@@ -1,0 +1,12 @@
+{
+  "name": "lankamart-api",
+  "version": "1.0.0",
+  "description": "LankaMart API",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"No tests configured, skipping\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

@@ -1,0 +1,414 @@
+# ============================================================================
+#  SE3090 Lecture 04 - LankaMart API request book
+#
+#  HOW TO USE
+#    VS Code : install the "REST Client" extension, then click "Send Request"
+#              above any request. Named captures below work automatically.
+#    VS 2022 : this file opens natively; click the green arrow.
+#    Rider   : opens natively.
+#
+#  THE FASTEST PATH THROUGH THE LECTURE
+#    1.  run  #2 Login as Amal            -> copies a Customer token
+#    2.  run  #14 Place an order          -> works
+#    3.  run  #17 Read SOMEONE ELSE's order -> 403, the whole of slide 36
+#    4.  run  #21 Try to add a product    -> 403, the whole of slide 38
+#    5.  run  #3 Login as Staff, repeat #21 -> 201
+#
+#  Requests are numbered so the TEACHING_GUIDE.md can point at them.
+# ============================================================================
+
+@host = http://localhost:5090
+@json = application/json
+
+# Demo accounts - all four share this password in Development only.
+@adminEmail    = admin@lankamart.lk
+@staffEmail    = staff@lankamart.lk
+@amalEmail     = amal@mail.lk
+@nadiaEmail    = nadia@mail.lk
+@password      = Password123!
+
+
+# ############################################################################
+#  PART 3 - THE API IS ALIVE, AND TALKING TO POSTGRESQL
+# ############################################################################
+
+### 1. Public catalogue - no token needed. Watch the SQL in the terminal.
+GET {{host}}/api/v1/products?page=1&pageSize=5
+Accept: {{json}}
+
+### 1b. Filter and search - both become a WHERE clause, not a C# loop.
+GET {{host}}/api/v1/products?search=mouse&page=1&pageSize=10
+Accept: {{json}}
+
+### 1c. Categories, so you know which CategoryId to send later.
+GET {{host}}/api/v1/categories
+Accept: {{json}}
+
+### 1d. Which PostgreSQL are we on, and as WHICH USER? (slide 23)
+#   If current_user is 'postgres' you are connected as the superuser.
+GET {{host}}/api/v1/demo/db-info
+Accept: {{json}}
+
+
+# ############################################################################
+#  PART 4 - AUTHENTICATION                                    (SLIDES 30-33)
+# ############################################################################
+
+### 2. Login as a CUSTOMER. Everything below reuses this token.
+# @name loginAmal
+POST {{host}}/api/v1/auth/login
+Content-Type: {{json}}
+
+{
+  "email": "{{amalEmail}}",
+  "password": "{{password}}"
+}
+
+@amalToken   = {{loginAmal.response.body.accessToken}}
+@amalRefresh = {{loginAmal.response.body.refreshToken}}
+
+### 3. Login as STAFF.
+# @name loginStaff
+POST {{host}}/api/v1/auth/login
+Content-Type: {{json}}
+
+{
+  "email": "{{staffEmail}}",
+  "password": "{{password}}"
+}
+
+@staffToken = {{loginStaff.response.body.accessToken}}
+
+### 4. Login as ADMIN.
+# @name loginAdmin
+POST {{host}}/api/v1/auth/login
+Content-Type: {{json}}
+
+{
+  "email": "{{adminEmail}}",
+  "password": "{{password}}"
+}
+
+@adminToken = {{loginAdmin.response.body.accessToken}}
+
+### 5. Login as a SECOND customer - needed for the 403 demo.
+# @name loginNadia
+POST {{host}}/api/v1/auth/login
+Content-Type: {{json}}
+
+{
+  "email": "{{nadiaEmail}}",
+  "password": "{{password}}"
+}
+
+@nadiaToken = {{loginNadia.response.body.accessToken}}
+
+### 6. WRONG PASSWORD -> 401.
+#   Read the message. Now run #7 and compare. They are IDENTICAL, on purpose:
+#   different messages would let an attacker enumerate registered emails.
+POST {{host}}/api/v1/auth/login
+Content-Type: {{json}}
+
+{
+  "email": "{{amalEmail}}",
+  "password": "definitely-not-the-password"
+}
+
+### 7. UNKNOWN EMAIL -> 401, the same message, in roughly the same time.
+POST {{host}}/api/v1/auth/login
+Content-Type: {{json}}
+
+{
+  "email": "nobody-here@mail.lk",
+  "password": "definitely-not-the-password"
+}
+
+### 8. What did the token actually say? (slide 31, step 6)
+#   Nothing here touched the database - this identity came from the JWT.
+GET {{host}}/api/v1/auth/me
+Authorization: Bearer {{amalToken}}
+Accept: {{json}}
+
+### 9. Decode the token WITHOUT any key at all. (slide 30)
+#   Signed, not encrypted. Anyone can read it; only the key holder can forge it.
+GET {{host}}/api/v1/demo/token-inspect?token={{amalToken}}
+Accept: {{json}}
+
+### 10. TAMPERED TOKEN -> 401. Change one character of the payload and the
+#   signature no longer matches. Paste your own token and edit a letter.
+GET {{host}}/api/v1/auth/me
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI5OTkiLCJyb2xlIjoiQWRtaW4ifQ.not-a-real-signature
+Accept: {{json}}
+
+### 11. NO TOKEN AT ALL -> 401 (not 403). Slide 28: we do not know who you are.
+GET {{host}}/api/v1/auth/me
+Accept: {{json}}
+
+### 12. REFRESH - rotation. The old refresh token dies the moment this runs.
+# @name refreshAmal
+POST {{host}}/api/v1/auth/refresh
+Content-Type: {{json}}
+
+{
+  "refreshToken": "{{amalRefresh}}"
+}
+
+### 13. REPLAY THE OLD REFRESH TOKEN -> 401 + the whole family is revoked.
+#   Run #12 first, then run this. It sends the SAME token again, which is what
+#   a thief would do. The API cannot tell a thief from a replay, so it assumes
+#   theft: every token in the family is revoked and both parties must log in
+#   again. Check the terminal for "Refresh token REUSE detected". (slide 32)
+POST {{host}}/api/v1/auth/refresh
+Content-Type: {{json}}
+
+{
+  "refreshToken": "{{amalRefresh}}"
+}
+
+### 13b. Register a brand-new customer. Note: adding "role": "Admin" here
+#   changes nothing - RegisterRequest has no such field. (slide 40)
+POST {{host}}/api/v1/auth/register
+Content-Type: {{json}}
+
+{
+  "name": "Test Student",
+  "email": "student.test@mail.lk",
+  "password": "StudentPass123!",
+  "role": "Admin",
+  "isActive": true
+}
+
+
+# ############################################################################
+#  PART 5 - AUTHORIZATION                                     (SLIDES 36-38)
+# ############################################################################
+
+### 14. Place an order as Amal. There is no customerId in this body -
+#   it comes from the token's 'sub' claim, server-side. (slide 33, last row)
+POST {{host}}/api/v1/orders
+Authorization: Bearer {{amalToken}}
+Content-Type: {{json}}
+
+{
+  "paymentMethod": "card",
+  "items": [
+    { "productId": 1, "quantity": 2 },
+    { "productId": 4, "quantity": 1 }
+  ]
+}
+
+### 15. OVER-POSTING PROOF. Same request, now claiming to be customer 1.
+#   The field is ignored. Check the customerId in the response.
+POST {{host}}/api/v1/orders
+Authorization: Bearer {{nadiaToken}}
+Content-Type: {{json}}
+
+{
+  "customerId": 1,
+  "status": "DELIVERED",
+  "deliveryFee": 0,
+  "paymentMethod": "cash",
+  "items": [
+    { "productId": 2, "quantity": 1 }
+  ]
+}
+
+### 16. Amal's own orders. This endpoint CANNOT return anyone else's data:
+#   the filter is the token's user id, so there is no id to tamper with.
+GET {{host}}/api/v1/orders/my
+Authorization: Bearer {{amalToken}}
+Accept: {{json}}
+
+### 17. ****  THE OBJECT-LEVEL AUTHORIZATION DEMO  ****        (slide 36)
+#   Order 1 belongs to Amal (seeded). Ask for it as NADIA.
+#   Valid token. Same Customer role. Same endpoint. -> 403 Forbidden.
+#   Comment out one line in OrderService.EnsureCanAccess and this becomes a
+#   data breach. OWASP API Security Top 10, number one.
+GET {{host}}/api/v1/orders/1
+Authorization: Bearer {{nadiaToken}}
+Accept: {{json}}
+
+### 18. The same order, as its OWNER -> 200.
+GET {{host}}/api/v1/orders/1
+Authorization: Bearer {{amalToken}}
+Accept: {{json}}
+
+### 19. The same order, as STAFF -> 200. Role beats ownership here, by design.
+GET {{host}}/api/v1/orders/1
+Authorization: Bearer {{staffToken}}
+Accept: {{json}}
+
+### 20. Every order in the system. Customer token -> 403. Staff -> 200.
+GET {{host}}/api/v1/orders?page=1&pageSize=10
+Authorization: Bearer {{amalToken}}
+Accept: {{json}}
+
+### 20b. ...and now as Staff.
+GET {{host}}/api/v1/orders?page=1&pageSize=10
+Authorization: Bearer {{staffToken}}
+Accept: {{json}}
+
+### 21. ****  ROLE-BASED AUTHORIZATION  ****                   (slide 38)
+#   Add a product as a CUSTOMER -> 403. Authenticated, identified, refused.
+POST {{host}}/api/v1/products
+Authorization: Bearer {{amalToken}}
+Content-Type: {{json}}
+
+{
+  "name": "Contraband Widget",
+  "categoryId": 1,
+  "price": 999,
+  "stockQty": 5
+}
+
+### 22. The identical request as STAFF -> 201 Created.
+POST {{host}}/api/v1/products
+Authorization: Bearer {{staffToken}}
+Content-Type: {{json}}
+
+{
+  "name": "Laptop Sleeve 15 inch",
+  "categoryId": 1,
+  "price": 3200,
+  "stockQty": 20
+}
+
+### 23. DELETE is Admin-only. As Staff -> 403.
+DELETE {{host}}/api/v1/products/11
+Authorization: Bearer {{staffToken}}
+
+### 24. As Admin -> 204... unless the product has been ordered, in which case
+#   PostgreSQL refuses (ON DELETE RESTRICT) and you get 409. (slide 14)
+DELETE {{host}}/api/v1/products/11
+Authorization: Bearer {{adminToken}}
+
+### 25. Deleting a product that IS on an order -> 409 Conflict.
+#   The database defends the invoice from the application.
+DELETE {{host}}/api/v1/products/1
+Authorization: Bearer {{adminToken}}
+
+### 26. PERMISSION-based, not role-based.                     (slide 38, note)
+#   Refund requires the "orders.refund" permission claim. Staff have it.
+POST {{host}}/api/v1/orders/1/refund
+Authorization: Bearer {{staffToken}}
+Accept: {{json}}
+
+### 27. The same refund as a Customer -> 403. No permission claim in the token.
+POST {{host}}/api/v1/orders/1/refund
+Authorization: Bearer {{amalToken}}
+Accept: {{json}}
+
+### 28. Cancel your own order -> 200, and the stock goes back.
+POST {{host}}/api/v1/orders/2/cancel
+Authorization: Bearer {{amalToken}}
+Accept: {{json}}
+
+### 29. Admin: list users and their roles.                        (slide 37)
+GET {{host}}/api/v1/users?page=1&pageSize=10
+Authorization: Bearer {{adminToken}}
+Accept: {{json}}
+
+### 30. Admin: grant Staff to Amal - ONE row in the user_roles junction table.
+POST {{host}}/api/v1/users/3/roles
+Authorization: Bearer {{adminToken}}
+Content-Type: {{json}}
+
+{
+  "role": "Staff"
+}
+
+### 31. ****  THE STATELESS TRADE-OFF  ****                       (slide 37)
+#   Amal is Staff now. Run #21 again with his EXISTING token: still 403,
+#   because roles were baked into the token at login. Then run #2 to log in
+#   again and repeat - now it works. Revocation lag, in thirty seconds.
+POST {{host}}/api/v1/products
+Authorization: Bearer {{amalToken}}
+Content-Type: {{json}}
+
+{
+  "name": "Second Widget",
+  "categoryId": 1,
+  "price": 450,
+  "stockQty": 3
+}
+
+### 32. Admin: revoke the role again. This ALSO kills Amal's refresh tokens,
+#   so the removal cannot be outlived by a quiet renewal.
+DELETE {{host}}/api/v1/users/3/roles/Staff
+Authorization: Bearer {{adminToken}}
+
+### 33. Log out - revokes the refresh token server-side.
+POST {{host}}/api/v1/auth/logout
+Content-Type: {{json}}
+
+{
+  "refreshToken": "{{amalRefresh}}"
+}
+
+
+# ############################################################################
+#  VALIDATION, ERRORS AND THE DELIBERATELY WRONG CODE       (SLIDES 26, 40, 41)
+# ############################################################################
+
+### 34. Validation failure -> 400 with a field-by-field list, before any of
+#   our code runs. Empty name, negative price, unknown payment method.
+POST {{host}}/api/v1/products
+Authorization: Bearer {{staffToken}}
+Content-Type: {{json}}
+
+{
+  "name": "",
+  "categoryId": 1,
+  "price": -50,
+  "stockQty": -3
+}
+
+### 35. Business rule -> 409. Order more than the stock we hold.
+POST {{host}}/api/v1/orders
+Authorization: Bearer {{amalToken}}
+Content-Type: {{json}}
+
+{
+  "paymentMethod": "card",
+  "items": [ { "productId": 5, "quantity": 99 } ]
+}
+
+### 36. A real PostgreSQL 23505 unique violation -> 409, cleanly. (slide 26)
+GET {{host}}/api/v1/demo/unique-violation
+Accept: {{json}}
+
+### 37. An unexpected exception -> 500 with a traceId and NOTHING else.
+#   Then find that traceId in the terminal, with the full stack. (slide 41)
+GET {{host}}/api/v1/demo/boom
+Accept: {{json}}
+
+### 38. What a careless API would have returned instead. (simulation only)
+GET {{host}}/api/v1/demo/leaky-error
+Accept: {{json}}
+
+### 39. ****  SQL INJECTION  ****                                 (slide 40)
+#   Baseline: one product.
+GET {{host}}/api/v1/demo/injection?name=Mouse&mode=vulnerable
+Accept: {{json}}
+
+### 40. The same endpoint, with  ' OR '1'='1  as the search text.
+#   Count the rows. The input stopped being data and became SYNTAX.
+GET {{host}}/api/v1/demo/injection?name=' OR '1'='1&mode=vulnerable
+Accept: {{json}}
+
+### 41. Identical input, parameterized. Zero rows - it searched for a product
+#   literally named "' OR '1'='1", which is exactly right.
+GET {{host}}/api/v1/demo/injection?name=' OR '1'='1&mode=safe
+Accept: {{json}}
+
+### 42. N+1 - one query for the orders, then one per order. Count them.
+GET {{host}}/api/v1/demo/n-plus-one
+Accept: {{json}}
+
+### 43. The same data in a single JOIN.
+GET {{host}}/api/v1/demo/with-include
+Accept: {{json}}
+
+### 44. bcrypt: same password, two different hashes, both valid. (slide 31)
+GET {{host}}/api/v1/demo/hash-password?password=Password123!
+Accept: {{json}}

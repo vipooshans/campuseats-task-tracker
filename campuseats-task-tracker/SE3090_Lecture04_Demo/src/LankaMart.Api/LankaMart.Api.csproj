@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>LankaMart.Api</RootNamespace>
+
+    <!-- SLIDE 23 - lets 'dotnet user-secrets set' work with no init step.
+         Secrets are stored OUTSIDE this folder, in your user profile, so they
+         can never be committed by accident. -->
+    <UserSecretsId>se3090-lecture04-lankamart</UserSecretsId>
+
+    <!-- Lets Swagger show the XML doc comments written above each action. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);1591</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ==================================================================
+         FOUR new dependencies compared with Lecture 03, one per new idea.
+         Every version is pinned to the 8.0.x line to match .NET 8 (LTS).
+         Mixing a 9.x package into a net8.0 project is the single most
+         common restore failure students hit.
+         ================================================================== -->
+
+    <!-- PART 3 - EF Core provider for PostgreSQL (SLIDE 25).
+         Brings Npgsql, the actual database driver, with it. -->
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="8.0.10" />
+
+    <!-- PART 3 - needed by the 'dotnet ef migrations' CLI (SLIDE 19). -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="8.0.10">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+
+    <!-- PART 4 - validates incoming JWTs (SLIDE 31, step 6). -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
+
+    <!-- PART 4 - password hashing (SLIDE 31, step 3). Deliberately slow. -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.3" />
+
+    <!-- Carried over from Lecture 03: Swagger / OpenAPI UI. -->
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+  </ItemGroup>
+
+</Project>

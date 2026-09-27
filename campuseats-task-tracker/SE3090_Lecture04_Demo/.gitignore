@@ -1,0 +1,24 @@
+# ============================================================
+#  SLIDE 23 - "NEVER hard-code credentials in source code or
+#              commit them to Git."
+#  The first three lines of the secrets block below are the
+#  reason this file exists. Everything else is build output.
+# ============================================================
+
+# SECRETS - never commit these
+.env
+.env.local
+*.env.local
+appsettings.*.local.json
+appsettings.Production.json
+
+# Build output
+bin/
+obj/
+
+# IDE
+*.user
+.vs/
+.idea/
+.vscode/
+*.received.*
